@@ -1,20 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
-"""
-cinnamon-shortcut-manager
-==========================
-
-A small GTK3 GUI for managing Cinnamon custom keyboard shortcuts: add, edit,
-delete, and see everything currently registered - no manual editing of
-Cinnamon Settings -> Keyboard -> Shortcuts -> Custom Shortcuts required.
-
-Shortcuts are written straight to gsettings/dconf (see keybindings.py), the
-same storage Cinnamon's own keybinding manager reads from, so anything
-created here is live system-wide immediately, survives logout/login, and
-shows up in Cinnamon Settings too.
-
-Run directly: python3 shortcut_manager.py
-"""
 
 import os
 import sys
@@ -30,8 +14,6 @@ import presets
 
 
 class AccelCaptureEntry(Gtk.Entry):
-    """A read-only entry that captures the next key combo pressed into it."""
-
     def __init__(self):
         super().__init__()
         self.set_editable(False)

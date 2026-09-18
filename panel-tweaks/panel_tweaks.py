@@ -1,22 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
-"""
-cinnamon-panel-tweaks
-=======================
-
-A small GTK3 GUI for the handful of Cinnamon bottom-panel settings that
-otherwise require digging through Cinnamon Settings -> Panel: autohide,
-height, edit mode (drag applets around), and per-applet enable/disable.
-Everything here reads and writes the same "org.cinnamon" gsettings keys
-Cinnamon Settings itself uses, so changes apply live, no restart needed.
-
-This intentionally does not attempt applet development or layout editing
-beyond enable/disable + reorder-via-edit-mode - that is Cinnamon Settings'
-job. This is a quick-access shortcut to the few knobs used often enough to
-be worth a one-click toggle.
-
-Run directly: python3 panel_tweaks.py
-"""
 
 import gi
 gi.require_version("Gtk", "3.0")

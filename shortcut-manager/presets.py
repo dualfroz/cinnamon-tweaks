@@ -1,10 +1,3 @@
-"""
-Quick-fill command presets for the shortcut manager's "new shortcut" dialog.
-Only offered when the underlying binary is actually installed, so the list
-never suggests a dead command. Purely a convenience for the command entry -
-any preset is still just a plain command string once saved.
-"""
-
 import shutil
 
 _CANDIDATES = [
