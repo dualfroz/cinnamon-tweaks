@@ -1,18 +1,6 @@
-"""
-Backend for reading/writing Cinnamon custom keyboard shortcuts.
-
-Cinnamon (like GNOME) stores custom shortcuts as a relocatable schema:
-each shortcut lives at /org/cinnamon/desktop/keybindings/custom-keybindings/customN/
-under the "org.cinnamon.desktop.keybindings.custom-keybinding" schema, with
-three keys: name, command, binding (an array of accelerator strings, in
-practice always a single entry). The top-level
-"org.cinnamon.desktop.keybindings" schema holds "custom-list", the array of
-customN ids Cinnamon actually reads at login. Writing straight to gsettings
-is enough to make the shortcut live system-wide - no daemon or restart
-needed, Cinnamon's keybinding manager watches these keys.
-"""
-
+import re
 import subprocess
+import sys
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -35,6 +23,15 @@ IGNORED_KEYVALS = {
     "Super_L", "Super_R", "Meta_L", "Meta_R", "Caps_Lock", "Num_Lock",
     "ISO_Level3_Shift",
 }
+
+MODIFIER_ALIASES = {
+    "control": "control", "ctrl": "control", "ctl": "control", "primary": "control",
+    "shift": "shift", "shft": "shift",
+    "alt": "alt", "mod1": "alt",
+    "super": "super", "mod4": "super",
+}
+
+missingSchemasReported = set()
 
 
 class Shortcut:
@@ -135,25 +132,58 @@ def deleteShortcut(customId):
         pass
 
 
-def findConflicts(binding, excludeCustomId=None):
+def normalizeAccelerator(binding):
     if not binding:
-        return []
-    conflicts = []
-    for shortcut in listShortcuts():
-        if shortcut.customId == excludeCustomId:
-            continue
-        if shortcut.binding == binding:
-            conflicts.append(f"custom shortcut \"{shortcut.name}\"")
+        return None
+    modifiers = re.findall(r"<([^<>]+)>", binding)
+    keyName = re.sub(r"<[^<>]+>", "", binding).strip()
+    if not keyName:
+        return None
+    normalizedModifiers = frozenset(MODIFIER_ALIASES.get(name.lower(), name.lower()) for name in modifiers)
+    return normalizedModifiers, keyName.lower()
 
-    for schemaId in CONFLICT_SCHEMAS:
-        settings = Gio.Settings.new(schemaId)
-        for key in settings.list_keys():
+
+def systemBindings(schemaIds=CONFLICT_SCHEMAS):
+    source = Gio.SettingsSchemaSource.get_default()
+    bindings = []
+    for schemaId in schemaIds:
+        schema = source.lookup(schemaId, True) if source else None
+        if schema is None:
+            if schemaId not in missingSchemasReported:
+                missingSchemasReported.add(schemaId)
+                print(f"warning: gsettings schema {schemaId} is not installed, skipped in the conflict check", file=sys.stderr)
+            continue
+        settings = Gio.Settings.new_full(schema, None, None)
+        for key in schema.list_keys():
             value = settings.get_value(key)
             if value.get_type_string() != "as":
                 continue
-            if binding in value.unpack():
-                conflicts.append(f"system shortcut \"{key}\" ({schemaId})")
+            for accelerator in value.unpack():
+                bindings.append((schemaId, key, accelerator))
+    return bindings
+
+
+def matchConflicts(binding, customShortcuts, systemShortcuts, excludeCustomId=None):
+    target = normalizeAccelerator(binding)
+    if target is None:
+        return []
+    conflicts = []
+    for shortcut in customShortcuts:
+        if shortcut.customId == excludeCustomId:
+            continue
+        if normalizeAccelerator(shortcut.binding) == target:
+            conflicts.append(f"custom shortcut \"{shortcut.name}\"")
+    for schemaId, key, accelerator in systemShortcuts:
+        label = f"system shortcut \"{key}\" ({schemaId})"
+        if label not in conflicts and normalizeAccelerator(accelerator) == target:
+            conflicts.append(label)
     return conflicts
+
+
+def findConflicts(binding, excludeCustomId=None):
+    if not binding:
+        return []
+    return matchConflicts(binding, listShortcuts(), systemBindings(), excludeCustomId)
 
 
 def keyEventToAccelerator(keyval, state):
