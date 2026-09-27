@@ -1,30 +1,26 @@
 # cinnamon-tweaks
 
-Two small GTK 3 desktop utilities for the Cinnamon desktop environment, each
-one built around the same frustration: a setting you change often enough to
-resent how many clicks it takes to reach through Cinnamon Settings.
+Two small GTK 3 utilities for the Cinnamon desktop that put frequently changed
+settings one click away instead of several pages deep in Cinnamon Settings.
+`shortcut-manager` lists, adds, edits and deletes custom keyboard shortcuts;
+`panel-tweaks` toggles panel auto-hide and edit mode, sets the panel height and
+enables or disables applets. Neither tool has storage of its own: both read and
+write the same gsettings/dconf keys Cinnamon uses, so every change applies
+immediately, survives logout and shows up in Cinnamon Settings. No daemon runs
+in the background, and the two tools install independently.
 
 | Tool | Replaces | Interface |
 | --- | --- | --- |
-| [`shortcut-manager`](#shortcut-manager) | Settings → Keyboard → Shortcuts → Custom Shortcuts | GTK window, menu launcher |
-| [`panel-tweaks`](#panel-tweaks) | Settings → Panel | GTK window, menu launcher |
-
-Neither tool invents its own storage. Both read and write exactly the same
-gsettings/dconf keys Cinnamon itself uses, so every change is live immediately,
-survives logout, and shows up in Cinnamon Settings as if you had made it there.
-Nothing needs to be restarted and no daemon runs in the background.
-
-They install independently — take one, both, or neither.
+| [`shortcut-manager`](#shortcut-manager) | Settings > Keyboard > Shortcuts > Custom Shortcuts | GTK window, menu launcher |
+| [`panel-tweaks`](#panel-tweaks) | Settings > Panel | GTK window, menu launcher |
 
 ## Requirements
 
-- Cinnamon (the tools read `org.cinnamon.*` gsettings schemas, so they will not
-  do anything useful on GNOME, KDE or anything else)
+- Cinnamon. Both tools use `org.cinnamon.*` gsettings schemas and do nothing
+  useful on other desktops.
 - Python 3
 - PyGObject with GTK 3
-- `dconf` command-line tool — used by `shortcut-manager` to discover orphaned
-  shortcut slots and to delete shortcuts cleanly. Optional; the tool degrades
-  gracefully if it is missing.
+- `dconf` command-line tool (optional, used by `shortcut-manager`; see below)
 
 On Linux Mint and other Debian derivatives:
 
@@ -32,109 +28,175 @@ On Linux Mint and other Debian derivatives:
 sudo apt install python3-gi gir1.2-gtk-3.0 dconf-cli
 ```
 
----
-
 ## shortcut-manager
 
-A window that lists every custom keyboard shortcut registered on your desktop
-and lets you add, edit and delete them.
+A window listing every custom keyboard shortcut, with buttons to add, edit,
+delete and refresh.
 
 ### Features
 
-- **One list of everything.** Name, key combo and command for every custom
-  shortcut, in one sortable table.
-- **Capture instead of type.** The shortcut field records the next combination
-  you press rather than asking you to spell out `<Super><Shift>T`. Escape or
-  Backspace clears it.
-- **Conflict warnings.** Before you save, the dialog tells you if the
-  combination is already taken — by another custom shortcut, or by a built-in
-  one. It checks the Cinnamon desktop, window manager, media-key, Muffin and
-  GNOME window-manager schemas.
-- **Command presets.** The new-shortcut dialog offers quick-fill commands for
-  a terminal, file manager, screen lock, screenshot tools, volume mute, browser
-  and text editor. Only presets whose binary is actually installed are offered,
-  so the list never suggests a command that would fail.
-- **No orphans.** New shortcuts claim the lowest free `customN` slot, taking
-  into account slots left behind in dconf by other tools, and deleting a
-  shortcut resets its dconf path rather than just unlisting it.
+- **One table** with the name, key combination and command of every custom
+  shortcut listed in Cinnamon's `custom-list`. Double-clicking a row opens it
+  for editing.
+- **Key capture.** The shortcut field records the next combination you press
+  instead of asking you to type `<Super><Shift>t`. Escape, or Backspace without
+  modifiers, clears it. Lone modifier keys are ignored and only combinations
+  GTK accepts as valid accelerators are recorded.
+- **Conflict warnings.** While you edit, the dialog lists every other custom
+  shortcut and every built-in binding that already uses the same combination.
+  Built-in bindings are read from `org.cinnamon.desktop.keybindings`,
+  `org.cinnamon.desktop.keybindings.wm`,
+  `org.cinnamon.desktop.keybindings.media-keys`,
+  `org.cinnamon.muffin.keybindings` and `org.gnome.desktop.wm.keybindings`;
+  a schema that is not installed is skipped with a warning on stderr.
+  Combinations are compared after normalization, so modifier order, the
+  spellings `<Control>`, `<Ctrl>` and `<Primary>`, and the case of the key
+  name do not hide a conflict. A conflict is a warning, not a block: you can
+  still save.
+- **Command presets.** The dialog offers quick-fill commands, each shown only
+  when its program is installed:
 
-### Installing
+  | Preset | Command |
+  | --- | --- |
+  | Terminal | `gnome-terminal` |
+  | File manager | `nemo` |
+  | Lock screen | `cinnamon-screensaver-command --lock` |
+  | Screenshot - area | `flameshot gui` |
+  | Screenshot - full screen | `gnome-screenshot` |
+  | Web browser | `xdg-open http://` |
+  | Mute volume toggle | `amixer -q set Master toggle` |
+  | Text editor | `gedit` |
 
-```bash
-cd shortcut-manager
-./install.sh
-```
+  Picking a preset fills the command, and the name if it is still empty.
+- **Clean slot handling.** A new shortcut takes the lowest free `customN` id,
+  also skipping ids that other tools left behind in dconf. Deleting a shortcut
+  removes it from `custom-list` and resets its whole dconf path, so nothing is
+  left orphaned. Both of these use the `dconf` tool; without it, ids are picked
+  from `custom-list` only and deleted entries keep their values in dconf.
+- **Delete confirmation** before anything is removed.
 
-Copies the app into `~/.local/share/cinnamon-shortcut-manager` and adds a
-"Custom Shortcuts" launcher to your applications menu under Settings.
-
-To run it without installing:
-
-```bash
-python3 shortcut-manager/shortcut_manager.py
-```
+A new shortcut is saved only when it has a name, a command and a key
+combination. An edit needs a name and a command; clearing the combination
+leaves the shortcut unbound.
 
 ### Where the settings live
 
-Cinnamon stores custom shortcuts as a relocatable schema. Each one lives at
-`/org/cinnamon/desktop/keybindings/custom-keybindings/customN/` with `name`,
-`command` and `binding` keys, and the list of active ids sits in `custom-list`
-under `org.cinnamon.desktop.keybindings`. This tool writes precisely those, so
-anything it creates is indistinguishable from a shortcut made by hand.
-
----
+Each custom shortcut lives at
+`/org/cinnamon/desktop/keybindings/custom-keybindings/customN/` (schema
+`org.cinnamon.desktop.keybindings.custom-keybinding`) with `name`, `command`
+and `binding` keys. The list of active ids is `custom-list` in
+`org.cinnamon.desktop.keybindings`. Shortcuts created here are identical to
+ones made in Cinnamon Settings.
 
 ## panel-tweaks
 
-A window with the handful of panel settings worth a one-click toggle.
+A window with the panel settings worth a one-click toggle.
 
 ### Features
 
-- **Auto-hide** the panel on or off.
-- **Edit mode** on or off — the mode that lets you drag applets around the
-  panel.
-- **Panel height** on a slider, from 20 to 80 pixels, applied live as you drag.
-- **Applet list** for the panel, with a checkbox to enable or disable each one.
-
-### Installing
-
-```bash
-cd panel-tweaks
-./install.sh
-```
-
-Copies the app into `~/.local/share/cinnamon-panel-tweaks` and adds a "Panel
-Tweaks" launcher to your applications menu under Settings.
-
-To run it without installing:
-
-```bash
-python3 panel-tweaks/panel_tweaks.py
-```
-
-### Limitations worth knowing
-
-- **It only manages one panel.** If you have several panels configured, the tool
-  operates on the first one listed in `panels-enabled` and ignores the rest.
-- **Disabling an applet is one-way within a session.** Unchecking an applet
-  removes it from `enabled-applets` immediately. You can re-check the box while
-  the window is still open, but once you close and reopen the tool the applet is
-  no longer in the list, and you will need Cinnamon Settings to bring it back.
-- It deliberately does not try to be a layout editor or an applet manager.
-  That is Cinnamon Settings' job; this is a shortcut to the knobs used often.
+- **Auto-hide** on or off.
+- **Edit mode** on or off (the mode in which applets can be dragged around the
+  panel).
+- **Panel height** slider from 20 to 80 pixels, applied live while dragging.
+  A panel without a stored height is shown as 40.
+- **Applet list** for the panel, showing each applet's id and zone with a
+  checkbox to enable or disable it.
 
 ### Where the settings live
 
-All under the `org.cinnamon` schema: `panels-enabled`, `panels-autohide`,
+All in the `org.cinnamon` schema: `panels-enabled`, `panels-autohide`,
 `panels-height`, `panel-edit-mode` and `enabled-applets`.
 
----
+## Install and run
 
-## Tested on
+Each tool has its own `install.sh` and `uninstall.sh`. Installing copies the
+tool into `~/.local/share/` and adds a launcher to the applications menu under
+Settings:
 
-Linux Mint 22.2 with Cinnamon, on an X11 session. Both tools depend on Cinnamon
-schemas specifically and are not expected to work on other desktops.
+```bash
+./shortcut-manager/install.sh    # ~/.local/share/cinnamon-shortcut-manager, "Custom Shortcuts"
+./panel-tweaks/install.sh        # ~/.local/share/cinnamon-panel-tweaks, "Panel Tweaks"
+```
+
+Uninstalling removes the copied files and the launcher. Shortcuts and panel
+settings changed through the tools stay in effect, because they belong to
+Cinnamon:
+
+```bash
+./shortcut-manager/uninstall.sh
+./panel-tweaks/uninstall.sh
+```
+
+Both tools also run straight from a checkout without installing:
+
+```bash
+python3 shortcut-manager/shortcut_manager.py
+python3 panel-tweaks/panel_tweaks.py
+```
+
+There is nothing to build.
+
+## Tests
+
+Each tool has unit tests for its non-GUI logic, written with the standard
+library `unittest` module, so they need nothing beyond the runtime
+requirements. Run them from the repository root:
+
+```bash
+python3 -m unittest discover -s shortcut-manager/tests -t shortcut-manager
+python3 -m unittest discover -s panel-tweaks/tests -t panel-tweaks
+```
+
+- `shortcut-manager`: accelerator normalization, conflict matching against
+  custom and built-in shortcuts, reading built-in bindings from gsettings and
+  skipping a missing schema. The gsettings tests compile a throwaway schema
+  with `glib-compile-schemas` and use the in-memory gsettings backend, so they
+  never touch your real settings; they are skipped if `glib-compile-schemas`
+  is not installed.
+- `panel-tweaks`: reading and writing the per-panel `id:value` lists and
+  picking the managed panel, against a fake settings object.
+
+The GTK windows themselves are checked by hand on a Cinnamon desktop. Static
+checks:
+
+```bash
+python3 -m py_compile shortcut-manager/*.py panel-tweaks/*.py
+bash -n shortcut-manager/*.sh panel-tweaks/*.sh
+```
+
+## Project layout
+
+```
+shortcut-manager/
+  shortcut_manager.py   GTK window, add/edit dialog, key capture entry
+  keybindings.py        reading and writing custom shortcuts, conflict lookup
+  presets.py            command presets, filtered by installed programs
+  tests/                unit tests
+  install.sh
+  uninstall.sh
+panel-tweaks/
+  panel_tweaks.py       GTK window and the panel gsettings helpers
+  tests/                unit tests
+  install.sh
+  uninstall.sh
+```
+
+## Limitations
+
+- Cinnamon only. Built-in schemas missing from the conflict check are skipped,
+  but the custom shortcut schemas themselves must be installed.
+- The shortcut table does not refresh by itself when shortcuts are changed
+  elsewhere; use Refresh.
+- `panel-tweaks` manages one panel: the first id listed in `panels-enabled`.
+  Other panels are ignored. Edit mode is a global Cinnamon setting and affects
+  all panels.
+- Disabling an applet removes it from `enabled-applets` immediately. It can be
+  re-enabled while the window is open, but after reopening the tool it is no
+  longer listed and has to be added back through Cinnamon Settings.
+- Neither tool is a layout editor or applet manager; that stays with Cinnamon
+  Settings.
+- Tested on Linux Mint 22.2 with Cinnamon on X11.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
